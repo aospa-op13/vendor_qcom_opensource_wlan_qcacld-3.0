@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2012-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -67,6 +67,8 @@
 #include "wlan_nan_api.h"
 #include <wlan_p2p_api.h>
 #include <wlan_cfg80211_scan.h>
+#include "wlan_if_mgr_public_struct.h"
+#include "wlan_if_mgr_ucfg_api.h"
 
 /*----------------------------------------------------------------------------
  * Preprocessor Definitions and Constants
@@ -3436,6 +3438,7 @@ static QDF_STATUS sap_goto_starting(struct sap_context *sap_ctx,
 	tSirMacRateSet *ext_rates = &sap_ctx->sap_bss_cfg.extendedRateSet;
 	uint8_t h2e;
 	uint32_t con_ch_freq, con_vdev_id;
+	struct if_mgr_event_data evt_data = {0};
 
 	/*
 	 * check if channel is in DFS_NOL or if the channel
@@ -3560,6 +3563,13 @@ static QDF_STATUS sap_goto_starting(struct sap_context *sap_ctx,
 	sap_ctx->sap_radar_found_status = false;
 
 	sap_debug("session: %d", sap_ctx->sessionId);
+	evt_data.ap_info.ap_freq = sap_ctx->chan_freq;
+	qdf_status =
+		ucfg_if_mgr_deliver_event(sap_ctx->vdev,
+					  WLAN_IF_MGR_EV_AP_CHANNEL_SELECTED,
+					  &evt_data);
+	if (!QDF_IS_STATUS_SUCCESS(qdf_status))
+		sap_err("Failed to inform IF_MGR for channel selection");
 
 	qdf_status = sme_start_bss(mac_handle, sap_ctx->sessionId,
 				   &sap_ctx->sap_bss_cfg);
@@ -3782,6 +3792,17 @@ static void sap_check_and_update_vdev_ch_params(struct sap_context *sap_ctx)
 		sap_debug("Couldn't get vdev active channel");
 		return;
 	}
+
+	/*
+	 * for LL LT SAP freq can change after serialization in case of race
+	 * between two interface to avoid SCC
+	 */
+	if (sap_ctx->chan_freq != chan->ch_freq) {
+		sap_debug("Vdev %d updated freq %d -> %d", sap_ctx->vdev_id,
+			  sap_ctx->chan_freq,
+			  chan->ch_freq);
+		sap_ctx->chan_freq = chan->ch_freq;
+	}
 	if (sap_ctx->ch_params.ch_width == chan->ch_width)
 		return;
 
@@ -3800,8 +3821,8 @@ static void sap_check_and_update_vdev_ch_params(struct sap_context *sap_ctx)
 		else
 			sap_ctx->ch_params.sec_ch_offset = HIGH_PRIMARY_CH;
 	}
-	sap_debug("updated BW %d -> %d", orig_ch_width,
-		  sap_ctx->ch_params.ch_width);
+	sap_debug("vdev %d updated BW %d -> %d", sap_ctx->vdev_id,
+		  orig_ch_width, sap_ctx->ch_params.ch_width);
 }
 
 /**

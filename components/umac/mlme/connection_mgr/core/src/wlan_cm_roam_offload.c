@@ -5191,6 +5191,14 @@ cm_roam_state_change(struct wlan_objmgr_pdev *pdev,
 		goto end;
 	}
 
+	if (requested_state == WLAN_ROAM_RSO_ENABLED &&
+	    (policy_mgr_is_chan_switch_in_progress(psoc) ||
+	     policy_mgr_is_conc_sap_ready_for_mcc_to_scc_trans(psoc))) {
+		mlme_debug("ROAM: roam state(%d) change requested when a concurrent SAP is in MCC or CSA is in progress",
+			   requested_state);
+		goto end;
+	}
+
 	status = cm_handle_mlo_rso_state_change(pdev, &vdev_id, requested_state,
 						reason, &is_rso_skip);
 	if (is_rso_skip)
@@ -6193,6 +6201,8 @@ void cm_update_session_assoc_ie(struct wlan_objmgr_psoc *psoc,
 	rso_cfg->assoc_ie.ptr = qdf_mem_malloc(assoc_ie->len);
 	if (!rso_cfg->assoc_ie.ptr)
 		goto rel_vdev_ref;
+
+	cm_update_ext_cap_ie_at_source(psoc, assoc_ie);
 
 	rso_cfg->assoc_ie.len = assoc_ie->len;
 	qdf_mem_copy(rso_cfg->assoc_ie.ptr, assoc_ie->ptr, assoc_ie->len);
@@ -7608,10 +7618,11 @@ wlan_convert_bitmap_to_band(uint8_t bitmap)
 {
 	uint8_t i;
 	enum wlan_diag_wifi_band band = WLAN_INVALID_BAND;
+	unsigned long band_bitmap = bitmap;
 
 	for (i = WLAN_24GHZ_BAND; i <= WLAN_6GHZ_BAND; i++) {
 		/* 2.4 GHz band will be populated at 0th bit in the bitmap*/
-		if (qdf_test_bit((i - 1), (unsigned long *)&bitmap)) {
+		if (qdf_test_bit((i - 1), &band_bitmap)) {
 			band = i;
 			break;
 		}
