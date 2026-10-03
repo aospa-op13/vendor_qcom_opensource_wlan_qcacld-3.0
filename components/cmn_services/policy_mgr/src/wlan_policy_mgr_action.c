@@ -3837,6 +3837,8 @@ policy_mgr_valid_sap_conc_channel_check(struct wlan_objmgr_psoc *psoc,
 			 */
 			ch_freq = 0;
 			if (con_mode == PM_SAP_MODE) {
+				policymgr_nofl_debug("MCC situation in non-dbs hw STA freq %d SAP freq %d",
+						     *con_ch_freq, sap_ch_freq);
 				if (cc_mode !=
 					QDF_MCC_TO_SCC_WITH_SAME_LOWER_BAND_MCC_WITH_HIGHER_BAND) {
 					policymgr_nofl_debug("MCC situation in non-dbs hw STA freq %d SAP freq %d not supported",

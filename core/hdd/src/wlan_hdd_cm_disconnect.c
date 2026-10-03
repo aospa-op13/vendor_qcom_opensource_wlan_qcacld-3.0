@@ -325,6 +325,7 @@ __hdd_cm_disconnect_handler_post_user_update(struct wlan_hdd_link_info *link_inf
 	if (!is_link_switch) {
 		/* Clear saved connection information in HDD */
 		hdd_conn_remove_connect_info(sta_ctx);
+		hdd_cm_clear_ieee_link_id(link_info, false);
 
 		/*
 		 * Reset the IEEE link ID to invalid when disconnect is not

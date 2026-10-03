@@ -12224,6 +12224,9 @@ bool policy_mgr_is_sap_allowed_on_dfs_freq(struct wlan_objmgr_pdev *pdev,
 	uint8_t vdev_id_list[MAX_NUMBER_OF_CONC_CONNECTIONS] = {0};
 	struct wlan_objmgr_vdev *vdev;
 
+    if (!wlan_reg_is_dfs_for_freq(pdev, ch_freq))
+    return true;
+
 	psoc = wlan_pdev_get_psoc(pdev);
 	if (!psoc)
 		return false;
@@ -14381,4 +14384,25 @@ void policy_mgr_update_flow_pool_map(struct wlan_objmgr_psoc *psoc,
 	if (op_mode != QDF_NAN_DISC_MODE &&
 	    pm_ctx->dp_cbacks.hdd_v2_flow_pool_map)
 		pm_ctx->dp_cbacks.hdd_v2_flow_pool_map(vdev_id);
+}
+
+bool
+policy_mgr_is_conc_sap_ready_for_mcc_to_scc_trans(struct wlan_objmgr_psoc *psoc)
+{
+	qdf_freq_t sap_ch_freq[MAX_NUMBER_OF_CONC_CONNECTIONS];
+	uint8_t vdev_id[MAX_NUMBER_OF_CONC_CONNECTIONS], i, sap_count;
+	uint8_t mcc_to_scc_switch = 0;
+
+	sap_count = policy_mgr_get_mode_specific_conn_info(psoc, sap_ch_freq,
+							   vdev_id,
+							   PM_SAP_MODE);
+	policy_mgr_get_mcc_scc_switch(psoc, &mcc_to_scc_switch);
+
+	for (i = 0; i < sap_count; i++)
+		if (policy_mgr_is_restart_sap_required(psoc, vdev_id[i],
+						       sap_ch_freq[i],
+						       mcc_to_scc_switch))
+			return true;
+
+	return false;
 }

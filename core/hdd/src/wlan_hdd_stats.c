@@ -6568,6 +6568,7 @@ static void wlan_hdd_fill_station_info(struct wlan_objmgr_psoc *psoc,
 	sinfo->tx_failed = stats->tx_failed;
 	sinfo->filled |= HDD_INFO_TX_FAILED;
 	sinfo->tx_retries = stats->tx_retries;
+	sinfo->filled |= HDD_INFO_TX_RETRIES;
 
 	/* sta flags */
 	hdd_fill_sta_flags(sinfo, stainfo);
@@ -7508,6 +7509,12 @@ hdd_wlan_fill_per_chain_rssi_stats(struct station_info *sinfo,
 			rssi_stats_valid = true;
 	}
 
+	#ifdef OPLUS_FEATURE_WIFI_BEAM_SWITCH
+	//add for beam switch
+	if (NUM_CHAINS_MAX > 1)
+		send_chain_rssi_to_oplus(link_info->vdev_id, sinfo->chain_signal_avg[0], sinfo->chain_signal_avg[1]);
+	#endif /* OPLUS_FEATURE_WIFI_BEAM_SWITCH */
+
 	if (rssi_stats_valid) {
 		sinfo->filled |= HDD_INFO_CHAIN_SIGNAL_AVG;
 		sinfo->filled |= HDD_INFO_SIGNAL_AVG;
@@ -7666,6 +7673,33 @@ static void wlan_hdd_update_rssi(struct wlan_hdd_link_info *link_info,
 	link_info->rssi = link_info->hdd_stats.summary_stat.rssi;
 	link_info->snr = link_info->hdd_stats.summary_stat.snr;
 	snr = link_info->snr;
+
+#ifdef OPLUS_FEATURE_WIFI_SIGNAL
+//Add for:Avoid upload invalid RSSI to upper layer when a new connection established.
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0))
+	{
+#define HW_VALID_RSSI_THRESHOLD (-90)
+		bool isValidRssi = true;
+		int i = 0;
+		if (link_info->rssi < HW_VALID_RSSI_THRESHOLD) {
+			for (i = 0; i < NUM_CHAINS_MAX; i++) {
+				if (link_info->hdd_stats.per_chain_rssi_stats.rssi[i] != WLAN_HDD_TGT_NOISE_FLOOR_DBM)
+					break;
+			}
+
+			if (i == NUM_CHAINS_MAX)
+				isValidRssi = false;
+		}
+
+		if (!isValidRssi) {
+			hdd_debug("get invalid RSSI from FW, use RSSI from scan result! HW combined RSSI=%d, Chain RSSI=%d.",
+				link_info->rssi, link_info->hdd_stats.per_chain_rssi_stats.rssi[0]);
+			link_info->rssi = 0;
+		}
+#undef HW_VALID_RSSI_THRESHOLD
+	}
+#endif
+#endif /* OPLUS_FEATURE_WIFI_SIGNAL */
 
 	/* for new connection there might be no valid previous RSSI */
 	if (!link_info->rssi) {

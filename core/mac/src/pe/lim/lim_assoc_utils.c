@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -3283,11 +3283,14 @@ lim_check_and_announce_join_success(struct mac_context *mac_ctx,
 	if (!LIM_IS_STA_ROLE(session_entry))
 		return;
 
-	if (SIR_MAC_MGMT_BEACON == header->fc.subType &&
+	//#ifdef OPLUS_BUG_STABILITY
+	//revert cbf24df31e2497f7a45355e89369b9f5f8f675df to allow no probe resp in connect
+	/*if (SIR_MAC_MGMT_BEACON == header->fc.subType &&
 	    lim_is_null_ssid(&beacon_probe_rsp->ssId)) {
 		pe_debug("for hidden ap, waiting probersp to announce join success");
 		return;
-	}
+	}*/
+	//#endif /* OPLUS_BUG_STABILITY */
 
 	pe_debug("Received Beacon/PR with BSSID:"QDF_MAC_ADDR_FMT" pe session %d vdev %d",
 		 QDF_MAC_ADDR_REF(session_entry->bssId),
@@ -3769,7 +3772,7 @@ QDF_STATUS lim_sta_send_add_bss(struct mac_context *mac, tpSirAssocRsp pAssocRsp
 				   uint8_t updateEntry, struct pe_session *pe_session)
 {
 	struct bss_params *pAddBssParams = NULL;
-	uint32_t retCode;
+	QDF_STATUS retCode;
 	tpDphHashNode sta = NULL;
 	bool chan_width_support = false;
 	bool is_vht_cap_in_vendor_ie = false;
@@ -3875,7 +3878,10 @@ QDF_STATUS lim_sta_send_add_bss(struct mac_context *mac, tpSirAssocRsp pAssocRsp
 
 	if (lim_is_session_he_capable(pe_session) &&
 			(pAssocRsp->he_cap.present)) {
-		/* Use STA SMPS capability as AP's SMPS value is not valid */
+		/* Use STA SMPS capability as AP's SMPS value is not valid,
+		 * and use p2p GO's assoc response value to avoid IOT issue.
+		 */
+		if (pe_session->opmode != QDF_P2P_CLIENT_MODE)
 		pAssocRsp->he_cap.he_dynamic_smps =
 				lim_is_he_dynamic_smps_enabled(pe_session);
 		lim_add_bss_he_cap(pAddBssParams, pAssocRsp);
@@ -4018,9 +4024,12 @@ QDF_STATUS lim_sta_send_add_bss(struct mac_context *mac, tpSirAssocRsp pAssocRsp
 						  pAssocRsp);
 		}
 
-		/* Use STA SMPS capability as AP's SMPS value is not valid */
-		pAssocRsp->HTCaps.mimoPowerSave =
-			pe_session->ht_config.mimo_power_save;
+
+		/* Use STA SMPS capability as AP's SMPS value is not valid,
+		 * and use p2p GO's assoc response value to avoid IOT issue.
+		 */
+		if (pe_session->opmode != QDF_P2P_CLIENT_MODE)
+		pAssocRsp->HTCaps.mimoPowerSave = pe_session->ht_config.mimo_power_save;
 		pAddBssParams->staContext.mimoPS =
 			(tSirMacHTMIMOPowerSaveState)
 			pAssocRsp->HTCaps.mimoPowerSave;
@@ -4224,10 +4233,10 @@ QDF_STATUS lim_sta_send_add_bss(struct mac_context *mac, tpSirAssocRsp pAssocRsp
 		SET_LIM_PROCESS_DEFD_MESGS(mac, true);
 		pe_err("wma_send_peer_assoc_req failed=%X",
 		       retCode);
+	} else {
+		lim_limit_bw_for_iot_ap(mac, pe_session, bssDescription);
 	}
 	qdf_mem_free(pAddBssParams);
-
-	lim_limit_bw_for_iot_ap(mac, pe_session, bssDescription);
 
 returnFailure:
 	/* Clean-up will be done by the caller... */
